@@ -28,7 +28,7 @@ class ChunkITXT:
 
         Passing nothing will initialize a new iTXt chunk
         Passing chunk_data will parse an existing iTXt chunk
-        :param chunk_data: chunk contents (string)
+        :param chunk_data: for existing chunks, the chunk contents (string)
         :param keyword: for new chunks, the keyword (string)
         :param text: for new chunks, the text payload (string)
         """
@@ -68,7 +68,7 @@ class ChunkITXT:
             self._lang = 'en-us'
             # Assume no translation needed
             self._translated_keyword = self._keyword
-            # Initialize an empty string
+            # String payload
             self._text = text
 
     def pack(self):
@@ -80,14 +80,19 @@ class ChunkITXT:
         # This means either as-is or compressed
         if self._compressed:
             assert self._compression_method == 0, "Unknown compression method."
-            t = zlib.compress(self._text)
+            t = zlib.compress(self._text.encode(encoding='utf-8'))
         else:
             t = self._text
         # Join all the chunk elements with null separators
-        return chr(0).join([self._keyword,
-                            chr(self._compressed) + chr(self._compression_method) + self._lang,
-                            self._translated_keyword,
-                            t])
+        # Return a tuple to match png.Reader.chunk()
+        return chr(0).encode('utf-8').join([
+            self._keyword.encode('utf-8'),
+            (chr(self._compressed) + chr(self._compression_method) + self._lang).encode('utf-8'),
+            self._translated_keyword.encode('utf-8'),
+            t])
+
+    def get_chunk(self):
+        return 'iTXt', self.pack()
 
     def show(self):
         """List the chunk data for debugging purposes"""
