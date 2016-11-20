@@ -32,11 +32,15 @@ class ChunkITXT:
         :param keyword: for new chunks, the keyword (string)
         :param text: for new chunks, the text payload (string)
         """
-
         # If we are given chunk_data
-        if chunk_data is not None and chunk_data != '':
+        if chunk_data is not None and len(chunk_data) > 0:
+            # Were we given a chunk tuple or just the data?
+            if isinstance(chunk_data, tuple):
+                d = chunk_data[1]
+            else:
+                d = chunk_data
             # Cut the chunk data
-            t = self._split_chunkdata(chunk_data)
+            t = self._split_chunkdata(d)
             # Get the keyword for the text chunk
             self._keyword = t[0]
             # Parse 'compressed' flag
@@ -72,9 +76,9 @@ class ChunkITXT:
             self._text = text
 
     def pack(self):
-        """Prepare this chunk to be written to a PNG
+        """Prepare the chunk data payload
 
-        :return: A chunk, ready to be written with png.write_chunks()
+        :return: Chunk data
         """
         # Generate the text to be written
         # This means either as-is or compressed
@@ -84,7 +88,6 @@ class ChunkITXT:
         else:
             t = self._text
         # Join all the chunk elements with null separators
-        # Return a tuple to match png.Reader.chunk()
         return chr(0).encode('utf-8').join([
             self._keyword.encode('utf-8'),
             (chr(self._compressed) + chr(self._compression_method) + self._lang).encode('utf-8'),
@@ -92,17 +95,29 @@ class ChunkITXT:
             t])
 
     def get_chunk(self):
+        """Prepare this chunk to be written to a PNG
+
+        :return: A chunk tuple, ready to be written with png.write_chunks()
+        """
         return 'iTXt', self.pack()
 
-    def show(self):
-        """List the chunk data for debugging purposes"""
+    def print(self):
+        """Print the chunk data for debugging purposes"""
+        p = self.get_chunkdata()
         print('iTXt chunk contents:')
-        print('  keyword: "' + self._keyword + '"')
-        print('  compressed: ' + str(self._compressed))
-        print('  compression method: ' + str(self._compression_method))
-        print('  language: "' + self._lang + '"')
-        print('  tag translation: "' + self._translated_keyword + '"')
-        print('  text: "' + self._text + '"')
+        for k in p.keys():
+            print('  ' + k + ': "' + str(p[k]) + '"')
+
+    def get_chunkdata(self):
+        """Return a dict of the decoded chunk data elements"""
+        return {
+            'keyword': self._keyword,
+            'compressed': bin(self._compressed),
+            'compressionMethod': self._compression_method,
+            'language': self._lang,
+            'translatedKeyword': self._translated_keyword,
+            'text': self._text
+        }
 
     @staticmethod
     def _split_chunkdata(s):

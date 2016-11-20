@@ -7,7 +7,7 @@ See pypng documentation for acceptable modes and bit depths"""
 import png
 import numpy as np
 import io
-from ._colormaps import _colormaps
+from ._colormaps import ColorMaps
 from ._pngTextChunks import ChunkITXT
 
 __author__ = "Finite Mobius, LLC"
@@ -56,9 +56,6 @@ class MatrixPNG:
         self._matrix = np.empty([0, 0, 0])
         # Initialize the internal buffer
         #self._pngbuffer = None
-        # Set up the color map
-        # Currently fixed at extended-black-body for RGB
-        self._setup_colors()
         # Data/scale information
         # Values outside z_min and z_max will be clipped
         self._scale = {
@@ -73,8 +70,11 @@ class MatrixPNG:
             "y_units": y_units
         }
         self._y_invert = y_upward  # See _setminmax()
-        # For noe, the only non-grayscale color map is extended black body
+        # For now, the only non-grayscale color map is extended black body
         self._colormap = "ebb"
+        # Set up the color map
+        # Currently fixed at extended-black-body for RGB
+        self._setup_colors()
 
     @property
     def mode(self):
@@ -100,6 +100,47 @@ class MatrixPNG:
             raise ValueError('Bit depth ' + str(bd) + ' is unsupported.')
         else:
             self._png["bitdepth"] = bd
+
+    def set_scaling(self, z_min=None, z_max=None, z_units=None,
+                 x_min=None, x_max=None, x_units=None,
+                 y_min=None, y_max=None, y_units=None,
+                 y_upward=None):
+        """Set the minimum, maximum, and units for x, y, and z
+
+        Only set the parameters you want to modify with each call
+
+        :param z_min: minimum z value (default = minimum element value)
+        :param z_max: maximum z value (default = maximum element value)
+        :param z_units: z units (default = None)
+        :param x_min: minimum x value (default = 0)
+        :param x_max: maximum x value (default = len(matrix))
+        :param x_units: x units (default = None)
+        :param y_min: minimum y value (default = 0)
+        :param y_max: maximum y value (default = len(matrix[0]))
+        :param y_units: y units (default = None)
+        :param y_upward: if y should increase upward (default=True)
+        :return: None
+        """
+        if z_min is not None:
+            self._scale["z_min"] = z_min
+        if z_max is not None:
+            self._scale["z_max"] = z_max
+        if z_units is not None:
+            self._scale["z_units"] = z_units
+        if x_min is not None:
+            self._scale["x_min"] = x_min
+        if x_max is not None:
+            self._scale["x_max"] = x_max
+        if x_units is not None:
+            self._scale["x_units"] = x_units
+        if y_min is not None:
+            self._scale["y_min"] = y_min
+        if y_max is not None:
+            self._scale["y_max"] = y_max
+        if y_units is not None:
+            self._scale["y_units"] = y_units
+        if y_upward is not None:
+            self._y_invert = y_upward
 
     def matrix2png(self, matrix, file):
         """Load a numpy 2-D ndarray and build the PNG output"""
@@ -203,7 +244,7 @@ class MatrixPNG:
             self._scale["y_max"] = len(matrix[0])
         # If y is increasing bottom to top instead of top to bottom, reverse y_min and y_max
         # (y_min corresponds to the PNG's y=0 row, which is the top right)
-        if self._y_invert:
+        if self._y_invert and self._scale["y_max"] > self._scale["y_min"]:
             t = self._scale["y_max"]
             self._scale["y_max"] = self._scale["y_min"]
             self._scale["y_min"] = t
@@ -213,19 +254,13 @@ class MatrixPNG:
         # TODO
         pass
 
-    def _get_matrix(self):
-        """Return the current matrix
-
-        :return: numpy ndarray"""
-        return self._matrix
-
     def _setup_colors(self):
         """Initialize the color map
 
         :return: None
         """
         if self.mode is not None and self.bitdepth is not None:
-            self._png["colormap"] = _colormaps(self.bitdepth, self.mode)
+            self._png["colormap"] = ColorMaps(mode=self.mode, bd=self.bitdepth, colormap=self._colormap)
 
     @property
     def quantization_levels(self):
