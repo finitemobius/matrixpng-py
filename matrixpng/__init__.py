@@ -72,7 +72,6 @@ class MatrixPNG:
         # For now, the only non-grayscale color map is extended black body
         self._colormap = "ebb"
         # Set up the color map
-        # Currently fixed at extended-black-body for RGB
         self._setup_colors()
 
     @property
@@ -141,8 +140,16 @@ class MatrixPNG:
         if y_ascend_up is not None:
             self._y_invert = y_ascend_up
 
-    def matrix2png(self, matrix, file):
-        """Load a numpy 2-D ndarray and build the PNG output"""
+    def matrix2png(self, matrix, file, x_axis_first=True):
+        """Load a numpy 2-D ndarray and build the PNG output
+
+        By default, we assume that the first dimension corresponds to x (columns) and the second to y (rows).
+        If you have already transposed your matrix (perhaps because you're used to matplotlib),
+        then set x_axis_first to False.
+        :param matrix: 2-D numpy.ndarray
+        :param file: File name (string) to write
+        :param x_axis_first: Whether the x axis is the first axis in the 2-D array
+        """
         # Set up scale values
         self._setminmax(matrix)
         # Local values to simplify this code section
@@ -163,19 +170,17 @@ class MatrixPNG:
                     _arr[i][j][:_channels] = self._nan_value()
                 else:
                     # Find the index
-                    k = int(np.clip([(float(matrix[i][j] - _zmin) /
-                                      float(_zmax - _zmin) *
-                                      float(self.quantization_levels - 1))],
+                    k = int(np.clip([(float(matrix[i][j] - _zmin) / self.quantization_delta)],
                                     0, self.quantization_levels - 1)[0])
                     # Save those color values to the array
                     _arr[i][j][:_channels] = self._png["colormap"][k]
+        # If the array is to be represented as m[x][y] rather than m[y][x] (rows = y, cols = x)
+        if x_axis_first:
+            _arr = np.transpose(_arr, axes=(1, 0, 2))
+        # Make y ascend upward rather than downward
         if self._y_invert:
             _arr = np.flipud(_arr)
-        _info = {
-            "bitdepth": self.bitdepth,
-            "compression": 9
-        }
-        _png = self._make_png(_arr, _info)
+        _png = self._make_png(_arr)
         self._save_png(_png, file)
 
     def _nan_value(self):
@@ -188,7 +193,7 @@ class MatrixPNG:
             return 0
         # In the future, we can play with alpha or something
 
-    def _make_png(self, arr, info):
+    def _make_png(self, arr):
         """Write png data to a buffer
 
         :return: io.BytesIO"""
@@ -197,7 +202,7 @@ class MatrixPNG:
         if self.bitdepth == 16:
             _mode += ";16"
         # This returns a png.Image type
-        _png_image = png.from_array(arr, mode=_mode, info=info)
+        _png_image = png.from_array(arr, mode=_mode, info={"bitdepth": self.bitdepth})
         # Save this to a buffer
         f = io.BytesIO()
         _png_image.save(f)
@@ -247,6 +252,8 @@ class MatrixPNG:
             self._scale["y_min"] = 0
         if self._scale["y_max"] is None:
             self._scale["y_max"] = len(matrix[0])
+        # Reset the quantization info
+        self._setup_quantization()
 
     def pngfile2matrix(self, filename):
         """Read a PNG from a filename and build a matrix
@@ -289,11 +296,13 @@ class MatrixPNG:
                     self._colormap = cd["text"]
                 elif cd["keyword"] == "y_ascend":
                     if cd["text"] == "down":
-                        _y_invert = False
+                        self._y_invert = False
                     elif cd["text"] == "up":
-                        _y_invert = True
+                        self._y_invert = True
         # Set up the color map
         self._setup_colors()
+        # Set up quantization
+        self._setup_quantization()
         # Reset f
         f.seek(0)
         # Get the matrix representing the PNG
@@ -308,8 +317,29 @@ class MatrixPNG:
 
         :return: None
         """
+        # Load our color map
         if self.mode is not None and self.bitdepth is not None:
             self._png["colormap"] = ColorMaps(mode=self.mode, bd=self.bitdepth, colormap=self._colormap)
+
+    def _setup_quantization(self):
+        """Do some preliminary work to save some hassle later
+
+        :return: None
+        """
+        # Enforce z_min and z_max being floats
+        for k in "z_min", "z_max":
+            self._scale[k] = float(self._scale[k])
+        # Compute the quantization delta
+        self._quantization_delta = float(self._scale["z_max"] - self._scale["z_min"]) /\
+                                   float(self.quantization_levels - 1)
+
+    def _color_to_z_value(self, color):
+        """Convert a color to a z value
+
+        :param color: Color value (list or tuple)
+        :return: z value (float)
+        """
+        # TODO
 
     @property
     def quantization_levels(self):
@@ -319,6 +349,13 @@ class MatrixPNG:
         """
         return len(self._png["colormap"])
 
+    @property
+    def quantization_delta(self):
+        """The quantization delta
+
+        :return: float
+        """
+        return self._quantization_delta
 
 def _main():
     raise (SyntaxError, "Don't call this module directly. Use 'import matrixpng'.")
