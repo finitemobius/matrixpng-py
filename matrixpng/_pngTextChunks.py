@@ -42,7 +42,7 @@ class ChunkITXT:
             # Cut the chunk data
             t = self._split_chunkdata(d)
             # Get the keyword for the text chunk
-            self._keyword = t["keyword"]
+            self._keyword = t["keyword"].decode('utf-8')
             # Parse 'compressed' flag
             # 0 = uncompressed, 1 = compressed
             self._compressed = t["compressed"]
@@ -50,17 +50,17 @@ class ChunkITXT:
             # 0 = zlib
             self._compression_method = t["compressionMethod"]
             # Parse the language tag
-            self._lang = t["language"]
+            self._lang = t["language"].decode('utf-8')
             # Parse the translated keyword (self.keyword translated into self.lang)
-            self._translated_keyword = t["translatedKeyword"]
+            self._translated_keyword = t["translatedKeyword"].decode('utf-8')
             # Parse the text
             if self._compressed:
                 # zlib decompression
                 assert self._compression_method == 0, "Unknown compression method."
-                self._text = zlib.decompress(t["text"])
+                self._text = zlib.decompress(t["text"]).decode('utf-8')
             else:
                 # text is uncompressed
-                self._text = t["text"]
+                self._text = t["text"].decode('utf-8')
         # If we aren't given chunk data
         else:
             # Initialize defaults
