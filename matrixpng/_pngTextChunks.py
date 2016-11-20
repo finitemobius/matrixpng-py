@@ -42,25 +42,25 @@ class ChunkITXT:
             # Cut the chunk data
             t = self._split_chunkdata(d)
             # Get the keyword for the text chunk
-            self._keyword = t[0]
+            self._keyword = t["keyword"]
             # Parse 'compressed' flag
             # 0 = uncompressed, 1 = compressed
-            self._compressed = ord(t[1][0])
+            self._compressed = t["compressed"]
             # Parse compression method
             # 0 = zlib
-            self._compression_method = ord(t[1][1])
+            self._compression_method = t["compressionMethod"]
             # Parse the language tag
-            self._lang = t[1][2:]
+            self._lang = t["language"]
             # Parse the translated keyword (self.keyword translated into self.lang)
-            self._translated_keyword = t[2]
+            self._translated_keyword = t["translatedKeyword"]
             # Parse the text
             if self._compressed:
                 # zlib decompression
                 assert self._compression_method == 0, "Unknown compression method."
-                self._text = zlib.decompress(t[3])
+                self._text = zlib.decompress(t["text"])
             else:
                 # text is uncompressed
-                self._text = t[3]
+                self._text = t["text"]
         # If we aren't given chunk data
         else:
             # Initialize defaults
@@ -112,7 +112,7 @@ class ChunkITXT:
         """Return a dict of the decoded chunk data elements"""
         return {
             'keyword': self._keyword,
-            'compressed': bin(self._compressed),
+            'compressed': bool(self._compressed),
             'compressionMethod': self._compression_method,
             'language': self._lang,
             'translatedKeyword': self._translated_keyword,
@@ -121,15 +121,21 @@ class ChunkITXT:
 
     @staticmethod
     def _split_chunkdata(s):
-        """Split the chunk data string on null separators
+        """Split the chunk data string on null separators and byte bounds
 
-        Also validates that there are enough null separators
-        :param s: The string to cut
-        :return: The split string
+        :param s: The binary string to cut
+        :return: dict of raw chunk elements
         """
+        r = {}
         # Split on \x00
-        r = s.split(chr(0))
-        # By the definition of this chunk type, there should be exactly three null separators
-        assert len(r) == 4, "Invalid iTXt chunk. (Incorrect number of null separators.)"
-        # return the list
+        t = s.split(chr(0).encode('utf-8'), maxsplit=1)
+        r["keyword"] = t[0]
+        r["compressed"] = t[1][0]
+        r["compressionMethod"] = t[1][1]
+        # Split on \x00
+        t = t[1][2:].split(chr(0).encode('utf-8'), maxsplit=2)
+        r["language"] = t[0]
+        r["translatedKeyword"] = t[1]
+        r["text"] = t[2]
+        # return the dict
         return r
