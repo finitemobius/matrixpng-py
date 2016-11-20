@@ -26,7 +26,7 @@ class MatrixPNG:
                  z_min=None, z_max=None, z_units=None,
                  x_min=None, x_max=None, x_units=None,
                  y_min=None, y_max=None, y_units=None,
-                 y_upward=True):
+                 y_ascend_up=True):
         """Initialize the matrix-PNG transformer
 
         :param mode: PNG mode (default = 'RGB')
@@ -40,7 +40,7 @@ class MatrixPNG:
         :param y_min: minimum y value (default = 0)
         :param y_max: maximum y value (default = len(matrix[0]))
         :param y_units: y units (default = None)
-        :param y_upward: if y should increase upward (default=True)
+        :param y_ascend_up: if y should increase upward (default=True)
         """
         # Settings for the PNG output
         self._png = {
@@ -67,7 +67,8 @@ class MatrixPNG:
             "y_max": y_max,
             "y_units": y_units
         }
-        self._y_invert = y_upward  # See _setminmax()
+        # Whether the y axis should be inverted (y ascends upward)
+        self._y_invert = y_ascend_up
         # For now, the only non-grayscale color map is extended black body
         self._colormap = "ebb"
         # Set up the color map
@@ -102,7 +103,7 @@ class MatrixPNG:
     def set_scaling(self, z_min=None, z_max=None, z_units=None,
                     x_min=None, x_max=None, x_units=None,
                     y_min=None, y_max=None, y_units=None,
-                    y_upward=None):
+                    y_ascend_up=None):
         """Set the minimum, maximum, and units for x, y, and z
 
         Only set the parameters you want to modify with each call
@@ -116,7 +117,7 @@ class MatrixPNG:
         :param y_min: minimum y value (default = 0)
         :param y_max: maximum y value (default = len(matrix[0]))
         :param y_units: y units (default = None)
-        :param y_upward: if y should increase upward (default=True)
+        :param y_ascend_up: if y should increase upward (default=True)
         :return: None
         """
         if z_min is not None:
@@ -137,8 +138,8 @@ class MatrixPNG:
             self._scale["y_max"] = y_max
         if y_units is not None:
             self._scale["y_units"] = y_units
-        if y_upward is not None:
-            self._y_invert = y_upward
+        if y_ascend_up is not None:
+            self._y_invert = y_ascend_up
 
     def matrix2png(self, matrix, file):
         """Load a numpy 2-D ndarray and build the PNG output"""
@@ -218,10 +219,17 @@ class MatrixPNG:
             chunklist.append(c)
         fp.close()
         # Add text chunks
+        # Scale information
         for k in self._scale.keys():
             chunklist.insert(-1, ChunkITXT(keyword=k, text=str(self._scale[k])).get_chunk())
+        # Color map name (only valid for RGB/RGBA)
         if self.mode.startswith('RGB'):
             chunklist.insert(-1, ChunkITXT(keyword='colormap', text=self._colormap).get_chunk())
+        # Which way does the y axis ascend?
+        if self._y_invert:
+            chunklist.insert(-1, ChunkITXT(keyword='y_ascend', text="up").get_chunk())
+        else:
+            chunklist.insert(-1, ChunkITXT(keyword='y_ascend', text="down").get_chunk())
         # Write the PNG
         png.write_chunks(file, chunklist)
 
@@ -239,12 +247,6 @@ class MatrixPNG:
             self._scale["y_min"] = 0
         if self._scale["y_max"] is None:
             self._scale["y_max"] = len(matrix[0])
-        # If y is increasing bottom to top instead of top to bottom, reverse y_min and y_max
-        # (y_min corresponds to the PNG's y=0 row, which is the top right)
-        if self._y_invert and self._scale["y_max"] > self._scale["y_min"]:
-            t = self._scale["y_max"]
-            self._scale["y_max"] = self._scale["y_min"]
-            self._scale["y_min"] = t
 
     def pngfile2matrix(self, filename):
         """Read a PNG from a filename and build a matrix
@@ -268,8 +270,30 @@ class MatrixPNG:
         fp.close()
         # Get the chunks
         for c in png.Reader(f).chunks():
-            # TODO: Parse iTXt chunks and set up metadata
-            print(c[0])
+            # Process iTXt chunks
+            if c[0].lower() == 'itxt':
+                cd = ChunkITXT(c[1]).get_chunkdata()
+                # Does the keyword match a known scale key?
+                if cd["keyword"] in self._scale.keys():
+                    # Try to cast as int or float before saving as text
+                    try:
+                        t = int(cd["text"])
+                    except:
+                        try:
+                            t = float(cd["text"])
+                        except:
+                            t = cd["text"]
+                    self._scale[cd["keyword"]] = t
+                # Other known keywords
+                elif cd["keyword"] == "colormap":
+                    self._colormap = cd["text"]
+                elif cd["keyword"] == "y_ascend":
+                    if cd["text"] == "down":
+                        _y_invert = False
+                    elif cd["text"] == "up":
+                        _y_invert = True
+        # Set up the color map
+        self._setup_colors()
         # Reset f
         f.seek(0)
         # Get the matrix representing the PNG
