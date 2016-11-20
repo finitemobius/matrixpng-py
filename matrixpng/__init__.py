@@ -54,8 +54,6 @@ class MatrixPNG:
         self.bitdepth = bitdepth
         # Initialize the internal matrix for building the PNG
         self._matrix = np.empty([0, 0, 0])
-        # Initialize the internal buffer
-        #self._pngbuffer = None
         # Data/scale information
         # Values outside z_min and z_max will be clipped
         self._scale = {
@@ -102,9 +100,9 @@ class MatrixPNG:
             self._png["bitdepth"] = bd
 
     def set_scaling(self, z_min=None, z_max=None, z_units=None,
-                 x_min=None, x_max=None, x_units=None,
-                 y_min=None, y_max=None, y_units=None,
-                 y_upward=None):
+                    x_min=None, x_max=None, x_units=None,
+                    y_min=None, y_max=None, y_units=None,
+                    y_upward=None):
         """Set the minimum, maximum, and units for x, y, and z
 
         Only set the parameters you want to modify with each call
@@ -215,18 +213,17 @@ class MatrixPNG:
         """
         # Convert the png "image" to a list of chunks
         # (Use a list because we're appending to it)
-        _chunklist = []
-        #_chunks =
+        chunklist = []
         for c in png.Reader(file=fp).chunks():
-            _chunklist.append(c)
+            chunklist.append(c)
         fp.close()
         # Add text chunks
         for k in self._scale.keys():
-            _chunklist.append(ChunkITXT(keyword=k, text=str(self._scale[k])).get_chunk())
+            chunklist.insert(-1, ChunkITXT(keyword=k, text=str(self._scale[k])).get_chunk())
         if self.mode.startswith('RGB'):
-            _chunklist.append(ChunkITXT(keyword='colormap', text=self._colormap).get_chunk())
+            chunklist.insert(-1, ChunkITXT(keyword='colormap', text=self._colormap).get_chunk())
         # Write the PNG
-        png.write_chunks(file, _chunklist)
+        png.write_chunks(file, chunklist)
 
     def _setminmax(self, matrix):
         """Set default values for scales"""
@@ -249,10 +246,38 @@ class MatrixPNG:
             self._scale["y_max"] = self._scale["y_min"]
             self._scale["y_min"] = t
 
+    def pngfile2matrix(self, filename):
+        """Read a PNG from a filename and build a matrix
+
+        :param filename: File name
+        :return: dict of matrix information
+        """
+        with open(filename, 'rb') as fp:
+            r = self.png2matrix(fp)
+        return r
+
     def png2matrix(self, fp):
-        """Read a PNG from a file pointer and build a matrix"""
-        # TODO
-        pass
+        """Read a PNG from a file pointer and build a matrix
+
+        :param fp: File pointer, opened in binary mode
+        :return: dict of matrix information
+        """
+        # Read in the data
+        f = io.BytesIO(fp.read())
+        # Close the file pointer
+        fp.close()
+        # Get the chunks
+        for c in png.Reader(f).chunks():
+            # TODO: Parse iTXt chunks and set up metadata
+            print(c[0])
+        # Reset f
+        f.seek(0)
+        # Get the matrix representing the PNG
+        # Read in using 'direct' format
+        m = png.Reader(f).asDirect()
+        # TODO: Convert to matrix
+        print(str(m[0]) + "x" + str(m[1]) + "; " + "planes: " + str(m[3]["planes"]) + ", alpha: " + str(m[3]["alpha"]))
+        return None
 
     def _setup_colors(self):
         """Initialize the color map
