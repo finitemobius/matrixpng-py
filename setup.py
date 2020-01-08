@@ -1,4 +1,4 @@
-from distutils.core import setup
+from setuptools import setup
 
 setup(name='matrixpng',
       version='alpha',
@@ -6,10 +6,10 @@ setup(name='matrixpng',
       url='https://github.com/finitemobius/matrixpng-py',
       author='Finite Mobius, LLC',
       author_email='jason@finitemobius.com',
-      license='GPLv3',
+      license='MIT',
       packages=['matrixpng'],
       zip_safe=False,
       install_requires=[
-          "pypng >= 0.0.18",
+          "pypng >= 0.0.20",
           "numpy >= 1.11"
       ])

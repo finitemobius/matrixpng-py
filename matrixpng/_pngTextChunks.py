@@ -23,7 +23,15 @@ class ChunkITXT:
     """Class to handle iTXt chunks for PNG files"""
     # TODO: Validate chunk parameters
 
-    def __init__(self, chunk_data=None, keyword='', text=''):
+    _null_byte = chr(0).encode("utf-8")
+    _encodings = {
+        "keyword": "latin_1",
+        "language": "ascii",
+        "translatedKeyword": "utf-8",
+        "text": "utf-8"
+    }
+
+    def __init__(self, chunk_data=None, keyword="", text=""):
         """Constructor
 
         Passing nothing will initialize a new iTXt chunk
@@ -42,25 +50,25 @@ class ChunkITXT:
             # Cut the chunk data
             t = self._split_chunkdata(d)
             # Get the keyword for the text chunk
-            self._keyword = t["keyword"].decode('utf-8')
-            # Parse 'compressed' flag
+            self._keyword = t["keyword"].decode(self._encodings["keyword"])
+            # Parse "compressed" flag
             # 0 = uncompressed, 1 = compressed
             self._compressed = t["compressed"]
             # Parse compression method
             # 0 = zlib
             self._compression_method = t["compressionMethod"]
             # Parse the language tag
-            self._lang = t["language"].decode('utf-8')
+            self._lang = t["language"].decode(self._encodings["language"])
             # Parse the translated keyword (self.keyword translated into self.lang)
-            self._translated_keyword = t["translatedKeyword"].decode('utf-8')
+            self._translated_keyword = t["translatedKeyword"].decode(self._encodings["translatedKeyword"])
             # Parse the text
             if self._compressed:
                 # zlib decompression
                 assert self._compression_method == 0, "Unknown compression method."
-                self._text = zlib.decompress(t["text"]).decode('utf-8')
+                self._text = zlib.decompress(t["text"]).decode(self._encodings["text"])
             else:
                 # text is uncompressed
-                self._text = t["text"].decode('utf-8')
+                self._text = t["text"].decode(self._encodings["text"])
         # If we aren't given chunk data
         else:
             # Initialize defaults
@@ -69,7 +77,7 @@ class ChunkITXT:
             self._compressed = 1
             self._compression_method = 0
             # US English (Sorry, I'm biased)
-            self._lang = 'en-us'
+            self._lang = "en-us"
             # Assume no translation needed
             self._translated_keyword = self._keyword
             # String payload
@@ -84,39 +92,43 @@ class ChunkITXT:
         # This means either as-is or compressed
         if self._compressed:
             assert self._compression_method == 0, "Unknown compression method."
-            t = zlib.compress(self._text.encode(encoding='utf-8'))
+            t = zlib.compress(self._text.encode(self._encodings["text"]))
         else:
             t = self._text
         # Join all the chunk elements with null separators
-        return chr(0).encode('utf-8').join([
-            self._keyword.encode('utf-8'),
-            (chr(self._compressed) + chr(self._compression_method) + self._lang).encode('utf-8'),
-            self._translated_keyword.encode('utf-8'),
-            t])
+        return self._null_byte.join(
+            [
+                self._keyword.encode(self._encodings["keyword"]),
+                (chr(self._compressed) + chr(self._compression_method)).encode("utf-8") + \
+                    self._lang.encode(self._encodings["language"]),
+                self._translated_keyword.encode(self._encodings["translatedKeyword"]),
+                t
+            ]
+        )
 
     def get_chunk(self):
         """Prepare this chunk to be written to a PNG
 
         :return: A chunk tuple, ready to be written with png.write_chunks()
         """
-        return 'iTXt', self.pack()
+        return bytes("iTXt", "iso8859-1"), self.pack()
 
     def print(self):
         """Print the chunk data for debugging purposes"""
         p = self.get_chunkdata()
-        print('iTXt chunk contents:')
+        print("iTXt chunk contents:")
         for k in p.keys():
             print('  ' + k + ': "' + str(p[k]) + '"')
 
     def get_chunkdata(self):
         """Return a dict of the decoded chunk data elements"""
         return {
-            'keyword': self._keyword,
-            'compressed': bool(self._compressed),
-            'compressionMethod': self._compression_method,
-            'language': self._lang,
-            'translatedKeyword': self._translated_keyword,
-            'text': self._text
+            "keyword": self._keyword,
+            "compressed": bool(self._compressed),
+            "compressionMethod": self._compression_method,
+            "language": self._lang,
+            "translatedKeyword": self._translated_keyword,
+            "text": self._text
         }
 
     @staticmethod
@@ -128,12 +140,12 @@ class ChunkITXT:
         """
         r = {}
         # Split on \x00
-        t = s.split(chr(0).encode('utf-8'), maxsplit=1)
+        t = s.split(ChunkITXT._null_byte, maxsplit=1)
         r["keyword"] = t[0]
         r["compressed"] = t[1][0]
         r["compressionMethod"] = t[1][1]
         # Split on \x00
-        t = t[1][2:].split(chr(0).encode('utf-8'), maxsplit=2)
+        t = t[1][2:].split(ChunkITXT._null_byte, maxsplit=2)
         r["language"] = t[0]
         r["translatedKeyword"] = t[1]
         r["text"] = t[2]

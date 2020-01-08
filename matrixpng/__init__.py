@@ -140,14 +140,14 @@ class MatrixPNG:
         if y_ascend_up is not None:
             self._y_invert = y_ascend_up
 
-    def matrix2png(self, matrix, file, x_axis_first=True):
+    def matrix2png(self, matrix, output_fp, x_axis_first=True):
         """Load a numpy 2-D ndarray and build the PNG output
 
         By default, we assume that the first dimension corresponds to x (columns) and the second to y (rows).
         If you have already transposed your matrix (perhaps because you're used to matplotlib),
         then set x_axis_first to False.
         :param matrix: 2-D numpy.ndarray
-        :param file: File name (string) to write
+        :param output_fp: File handle to write to (must be open in "wb" mode)
         :param x_axis_first: Whether the x axis is the first axis in the 2-D array
         """
         # Set up scale values
@@ -181,7 +181,7 @@ class MatrixPNG:
         if self._y_invert:
             _arr = np.flipud(_arr)
         _png = self._make_png(_arr)
-        self._save_png(_png, file)
+        self._save_png(_png, output_fp)
 
     def _nan_value(self):
         """Determine what gets wirtten in the case of np.nan"""
@@ -193,32 +193,51 @@ class MatrixPNG:
             return 0
         # In the future, we can play with alpha or something
 
+    def _convert_to_png_array(self, arr):
+        """Convert a 3-D array to a 2-D array compatible with png.from_array()
+
+        TODO: This needs work to be compatible with the changes to
+        png.from_array() in 0.0.20! Prior to this version, we used a 3-D array.
+
+        :rtype: np.array
+        """
+        _arr = np.empty([len(arr), len(arr[0]) * len(arr[0][0])], dtype=int)
+        # TODO: There must be a faster way to do this
+        for y in range(len(_arr)):
+            for x in range(len(_arr[0])):
+                _arr[y][x] = arr[y][int(x / 3)][x % 3]
+        return _arr
+
     def _make_png(self, arr):
         """Write png data to a buffer
 
-        :return: io.BytesIO"""
+        :rtype: io.BytesIO
+        """
         _mode = self.mode
         # pypng bit depth mode text
         if self.bitdepth == 16:
             _mode += ";16"
+        _png_array = self._convert_to_png_array(arr)
         # This returns a png.Image type
-        _png_image = png.from_array(arr, mode=_mode, info={"bitdepth": self.bitdepth})
+        _png_image = png.from_array(_png_array, mode=_mode, info={"bitdepth": self.bitdepth})
         # Save this to a buffer
         f = io.BytesIO()
-        _png_image.save(f)
+        _png_image.write(f)
         f2 = io.BytesIO(f.getvalue())
         f.close()
         # Return a readable BytesIO buffer
         return f2
 
-    def _save_png(self, fp, file):
+    def _save_png(self, fp, output_fp):
         """Write the PNG file
 
         :param fp: File pointer containing a "written" png byte stream
-        :param file: Name or fp of file to write to
+        :param output_fp: file handle to write to
         """
         # Convert the png "image" to a list of chunks
         # (Use a list because we're appending to it)
+        # TODO: Ensure iTXt is not ahead of IHDR, after IEND, or among the IDAT chunks.
+        # For now, assume IEND is the last chunk.
         chunklist = []
         for c in png.Reader(file=fp).chunks():
             chunklist.append(c)
@@ -229,14 +248,14 @@ class MatrixPNG:
             chunklist.insert(-1, ChunkITXT(keyword=k, text=str(self._scale[k])).get_chunk())
         # Color map name (only valid for RGB/RGBA)
         if self.mode.startswith('RGB'):
-            chunklist.insert(-1, ChunkITXT(keyword='colormap', text=self._colormap).get_chunk())
+            chunklist.insert(-1, ChunkITXT(keyword="colormap", text=self._colormap).get_chunk())
         # Which way does the y axis ascend?
         if self._y_invert:
-            chunklist.insert(-1, ChunkITXT(keyword='y_ascend', text="up").get_chunk())
+            chunklist.insert(-1, ChunkITXT(keyword="y_ascend", text="up").get_chunk())
         else:
-            chunklist.insert(-1, ChunkITXT(keyword='y_ascend', text="down").get_chunk())
+            chunklist.insert(-1, ChunkITXT(keyword="y_ascend", text="down").get_chunk())
         # Write the PNG
-        png.write_chunks(file, chunklist)
+        png.write_chunks(output_fp, chunklist)
 
     def _setminmax(self, matrix):
         """Set default values for scales"""
